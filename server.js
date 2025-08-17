@@ -6,24 +6,52 @@ const app = express();
 
 // CORS configuration for GitHub Pages
 app.use(cors({
-  origin: [
-    'https://haykoo707.github.io/test-payment/',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'https://ton-check.onrender.com'
-  ],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'https://haykoo707.github.io',
+      'https://haykoo707.github.io/test-payment',
+      'https://haykoo707.github.io/test-payment/',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'https://ton-check.onrender.com'
+    ];
+    
+    // Check if origin is allowed
+    if (allowedOrigins.some(allowedOrigin => origin.startsWith(allowedOrigin))) {
+      return callback(null, true);
+    }
+    
+    console.log('CORS blocked origin:', origin);
+    return callback(null, true); // Temporarily allow all origins for debugging
+  },
+  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'X-Requested-With'],
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
+
+// Handle preflight OPTIONS requests explicitly
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 app.use(express.json({ limit: '10mb' }));
 
 // Add request logging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  console.log('Headers:', req.headers);
-  console.log('Body:', req.body);
+  console.log('Origin:', req.headers.origin);
+  console.log('User-Agent:', req.headers['user-agent']);
+  if (req.method === 'POST') {
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+  }
   next();
 });
 
