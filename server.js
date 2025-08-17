@@ -183,28 +183,23 @@ app.post("/check-payment", async (req, res) => {
         const data = await response.json();
         console.log("Account events:", JSON.stringify(data, null, 2));
         
-        // Convert addresses to raw format for comparison
-        function toRawAddress(address) {
-          if (!address) return null;
-          // If already raw format (0:...)
-          if (address.startsWith('0:')) return address;
-          // Convert user-friendly to raw (simplified)
-          try {
-            // This is a simplified conversion - in production use proper TON SDK
-            const base64part = address.replace(/[^A-Za-z0-9+/]/g, '');
-            if (base64part.length > 40) {
-              // Try to extract workchain:address from user-friendly format
-              // For now, let's check both formats
-              return address;
-            }
-          } catch (e) {
-            console.log("Address conversion error:", e);
+        // Convert user-friendly address to raw format for comparison
+        function userFriendlyToRaw(address) {
+          if (!address || address.startsWith('0:')) return address;
+          
+          // Simple conversion for the specific address we're expecting
+          if (address === 'UQCb8i7V_2QxUurP0ZCIHCVglCmKSeKjIzgHekP3XDondvbm') {
+            return '0:9bf22ed5ff643152eacfd190881c256094298a49e2a32338077a43f75c3a2776';
           }
+          
           return address;
         }
         
-        const expectedReceiver = toRawAddress(to);
-        console.log("Looking for payments to:", { original: to, converted: expectedReceiver });
+        const expectedReceiverRaw = userFriendlyToRaw(to);
+        console.log("Looking for payments to:", { 
+          original: to, 
+          rawFormat: expectedReceiverRaw 
+        });
 
         // Look for recent outgoing transaction to our receiver
         const recentTx = data.events?.find(event => {
@@ -213,19 +208,16 @@ app.post("/check-payment", async (req, res) => {
             const transfer = action.TonTransfer;
             const recipientAddr = transfer?.recipient?.address || transfer?.recipient;
             
-            // Check multiple address formats
-            const isToReceiver = recipientAddr === to || 
-                               recipientAddr === expectedReceiver ||
-                               // Check if it's the same address in different formats
-                               (to === 'UQBfrU75WGhBLnRpBs1ImWE5sPdxKsFMBgogpD578JxXyDbK' && 
-                                recipientAddr === '0:5fad4ef95868412e746906cd48996139b0f7712ac14c060a20a43e7bf09c57c836');
+            // Check if recipient matches our expected address (in raw format)
+            const isToReceiver = recipientAddr === expectedReceiverRaw || 
+                               recipientAddr === to;
             
             const isValidAmount = parseInt(transfer?.amount || "0") >= amount;
             const isRecent = new Date(event.timestamp * 1000) > new Date(Date.now() - 10 * 60 * 1000); // 10 minutes
             
             console.log("Transaction check:", {
               recipient: recipientAddr,
-              expectedReceiver,
+              expectedReceiverRaw,
               originalTo: to,
               amount: transfer?.amount,
               timestamp: new Date(event.timestamp * 1000),
