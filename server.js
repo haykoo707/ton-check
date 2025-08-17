@@ -7,7 +7,7 @@ const app = express();
 // CORS configuration for GitHub Pages
 app.use(cors({
   origin: [
-    'https://haykoo707.github.io',
+    'https://haykoo707.github.io/test-payment/',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'https://ton-check.onrender.com'
