@@ -1,13 +1,13 @@
 const express = require("express");
-const fetch = require("node-fetch");
 const cors = require("cors");
+const fetch = require("node-fetch"); // Node < 18 համար
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const RECEIVER = "EQCxxxxxxxxxxxxxxxx"; // քո TON wallet հասցեն
-const AMOUNT = 2 * 1e9; // 2 TON in nanoTONs
+const RECEIVER = "UQBfrU75WGhBLnRpBs1ImWE5sPdxKsFMBgogpD578JxXyDbK"; // քո TON wallet հասցեն
+const AMOUNT = 100000; // frontend-ի 0.0001 TON nanoTON
 
 app.post("/check-payment", async (req, res) => {
   const { txHash } = req.body;
@@ -17,17 +17,16 @@ app.post("/check-payment", async (req, res) => {
     const response = await fetch(`https://tonapi.io/v1/blockchain/transactions/${txHash}`);
     const data = await response.json();
 
-    if (
-      data.in_msg?.destination === RECEIVER &&
-      parseInt(data.in_msg?.value || "0") >= AMOUNT
-    ) {
+    // Պроверяем, եթե transaction-ը ճիշտ հասցե ուղարկվել է և գումարը բավարար է
+    const msg = data.in_msg;
+    if (msg?.destination === RECEIVER && parseInt(msg?.value || "0") >= AMOUNT) {
       return res.json({ success: true });
     }
 
-    res.json({ success: false });
+    return res.json({ success: false });
   } catch (err) {
     console.error(err);
-    res.json({ success: false });
+    return res.json({ success: false });
   }
 });
 
