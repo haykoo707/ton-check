@@ -59,7 +59,7 @@ const RECEIVER = "UQBfrU75WGhBLnRpBs1ImWE5sPdxKsFMBgogpD578JxXyDbK";
 
 // Package configurations that match your HTML
 const PACKAGES = {
-  "100000": { spins: 1, name: "0.0001 TON = 1 Spin" },
+  "10000": { spins: 1, name: "0.00001 TON = 1 Spin" },
   "1000000000": { spins: 3, name: "1 TON = 3 Spins" },
   "1500000000": { spins: 5, name: "1.5 TON = 5 Spins" },
   "2800000000": { spins: 10, name: "2.8 TON = 10 Spins" }
