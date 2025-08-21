@@ -55,7 +55,7 @@ app.use((req, res, next) => {
   next();
 });
 
-const RECEIVER = "UQCb8i7V_2QxUurP0ZCIHCVglCmKSeKjIzgHekP3XDondvbm";
+const RECEIVER = "UQBfrU75WGhBLnRpBs1ImWE5sPdxKsFMBgogpD578JxXyDbK";
 
 // Package configurations that match your HTML
 const PACKAGES = {
