@@ -56,7 +56,7 @@ app.use((req, res, next) => {
 });
 
 const RECEIVER = "UQCb8i7V_2QxUurP0ZCIHCVglCmKSeKjIzgHekP3XDondvbm";
-const AMOUNT = 100000; // nanoTONs
+const AMOUNT = 100; // nanoTONs
 
 // Health check endpoint
 app.get("/health", (req, res) => {
