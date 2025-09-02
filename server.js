@@ -14,6 +14,8 @@ app.use(cors({
       'https://haykoo707.github.io',
       'https://haykoo707.github.io/test-payment',
       'https://haykoo707.github.io/test-payment/',
+      'https://hayinvest.github.io',
+      'https://hayinvest.github.io/',
       'http://localhost:3000',
       'http://127.0.0.1:3000',
       'https://ton-check.onrender.com'
@@ -25,7 +27,7 @@ app.use(cors({
     }
     
     console.log('CORS blocked origin:', origin);
-    return callback(null, true); // Temporarily allow all origins for debugging
+    return callback(null, false); // Properly block non-allowed origins
   },
   methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'X-Requested-With'],
@@ -75,18 +77,27 @@ app.get("/", (req, res) => {
 app.post("/check-payment", async (req, res) => {
   const { txHash, txBoc, from, to, amount } = req.body;
   
-  console.log("Payment check request:", { txHash: !!txHash, txBoc: !!txBoc, from, to, amount });
+  console.log("Payment check request:", { 
+    txHash: !!txHash, 
+    txHashValue: txHash,
+    txBoc: !!txBoc, 
+    from, 
+    to, 
+    amount,
+    fullBody: req.body
+  });
 
   try {
-    // Validate input
-    if (!txHash && !txBoc) {
+    // Validate input - ավելի մանրակրկիտ ստուգում
+    if ((!txHash || txHash === null || txHash === '') && (!txBoc || txBoc === null || txBoc === '')) {
       return res.status(400).json({ 
         success: false, 
-        error: "Either txHash or txBoc is required" 
+        error: "Either txHash or txBoc is required",
+        received: { txHash, txBoc, from, to, amount }
       });
     }
 
-    if (txHash) {
+    if (txHash && txHash !== null && txHash !== '') {
       console.log("Checking payment by txHash:", txHash);
       
       // Try different API endpoints for better reliability
@@ -156,7 +167,7 @@ app.post("/check-payment", async (req, res) => {
       });
     }
 
-    if (txBoc) {
+    if (txBoc && txBoc !== null && txBoc !== '') {
       console.log("Checking payment by txBoc for address:", from);
       
       if (!from || !to) {
@@ -257,7 +268,8 @@ app.post("/check-payment", async (req, res) => {
 
     return res.status(400).json({ 
       success: false, 
-      error: "Invalid request format" 
+      error: "Invalid request format - no valid txHash or txBoc provided",
+      received: { txHash, txBoc }
     });
 
   } catch (err) {
@@ -289,9 +301,10 @@ app.use((error, req, res, next) => {
   });
 });
 
+// Render.com-ը պահանջում է որ server-ը listen անի process.env.PORT-ին
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => { // ← Ավելացնել '0.0.0.0' host
   console.log(`✅ Backend running on port ${PORT}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/health`);
   console.log(`📡 API endpoint: http://localhost:${PORT}/check-payment`);
