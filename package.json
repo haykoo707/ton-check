@@ -1,15 +1,13 @@
 {
-  "name": "ton-spin-backend",
+  "name": "ton-check-backend",
   "version": "1.0.0",
-  "description": "Backend for TON Spin game",
-  "main": "server.js",
+  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "body-parser": "^1.20.2",
-    "axios": "^1.4.0"
+    "express": "^4.19.2",
+    "node-fetch": "^3.3.2"
   }
 }
