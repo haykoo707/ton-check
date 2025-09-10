@@ -1,14 +1,15 @@
 {
   "name": "ton-spin-backend",
   "version": "1.0.0",
-  "description": "TON Spin Game Payment Verification API",
+  "description": "Backend for TON Spin game",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "node-fetch": "^2.6.7"
+    "cors": "^2.8.5",
+    "body-parser": "^1.20.2",
+    "axios": "^1.4.0"
   }
 }
