@@ -6,41 +6,16 @@ const app = express();
 
 // CORS configuration for GitHub Pages
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    const allowedOrigins = [
-      'https://haykoo707.github.io',
-      'https://haykoo707.github.io/test-payment',
-      'https://haykoo707.github.io/test-payment/',
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'https://ton-check.onrender.com'
-    ];
-    
-    // Check if origin is allowed
-    if (allowedOrigins.some(allowedOrigin => origin.startsWith(allowedOrigin))) {
-      return callback(null, true);
-    }
-    
-    console.log('CORS blocked origin:', origin);
-    return callback(null, true); // Temporarily allow all origins for debugging
-  },
-  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'X-Requested-With'],
-  credentials: true,
-  optionsSuccessStatus: 200
+  origin: [
+    'https://haykoo707.github.io',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://ton-check.onrender.com'
+  ],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
+  credentials: true
 }));
-
-// Handle preflight OPTIONS requests explicitly
-app.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, X-Requested-With');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.sendStatus(200);
-});
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -56,14 +31,7 @@ app.use((req, res, next) => {
 });
 
 const RECEIVER = "UQCb8i7V_2QxUurP0ZCIHCVglCmKSeKjIzgHekP3XDondvbm";
-
-// Package configurations that match your HTML
-const PACKAGES = {
-  "100000": { spins: 1, name: "0.0001 TON = 1 Spin" },
-  "1000000000": { spins: 3, name: "1 TON = 3 Spins" },
-  "1500000000": { spins: 5, name: "1.5 TON = 5 Spins" },
-  "2800000000": { spins: 10, name: "2.8 TON = 10 Spins" }
-};
+const AMOUNT = 100000; // nanoTONs
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -73,197 +41,199 @@ app.get("/health", (req, res) => {
 // Root endpoint
 app.get("/", (req, res) => {
   res.json({ 
-    message: "TON Spin Game Payment Verification API",
-    endpoints: ["/health", "/check-payment", "/verify-transaction"],
-    version: "2.0.0",
-    receiver: RECEIVER,
-    packages: PACKAGES
+    message: "TON Payment Verification API",
+    endpoints: ["/health", "/check-payment"],
+    version: "1.0.0"
   });
 });
 
-// Main payment verification endpoint
 app.post("/check-payment", async (req, res) => {
-  const { txHash, txBoc, senderAddress, amount } = req.body;
+  const { txHash, txBoc, from, to, amount } = req.body;
   
-  console.log("Payment check request:", { 
-    txHash: !!txHash, 
-    txBoc: !!txBoc, 
-    senderAddress, 
-    amount 
-  });
+  console.log("Payment check request:", { txHash: !!txHash, txBoc: !!txBoc, from, to, amount });
 
   try {
     // Validate input
-    if (!txHash && !senderAddress) {
+    if (!txHash && !txBoc) {
       return res.status(400).json({ 
         success: false, 
-        error: "Either txHash or senderAddress is required" 
+        error: "Either txHash or txBoc is required" 
       });
     }
 
-    let isValidPayment = false;
-    let spinsEarned = 0;
-    let packageName = "";
-    let txDetails = null;
-
     if (txHash) {
-      // Method 1: Direct transaction verification by hash
-      console.log("Verifying payment by txHash:", txHash);
+      console.log("Checking payment by txHash:", txHash);
+      
+      // Try different API endpoints for better reliability
+      let response, data;
       
       try {
-        const response = await fetch(`https://tonapi.io/v2/blockchain/transactions/${txHash}`, {
+        // First try tonapi.io v2
+        response = await fetch(`https://tonapi.io/v2/blockchain/transactions/${txHash}`, {
           headers: { 'Accept': 'application/json' }
         });
         
         if (!response.ok) {
-          throw new Error(`TonAPI responded with status: ${response.status}`);
+          // Fallback to v1
+          response = await fetch(`https://tonapi.io/v1/blockchain/transactions/${txHash}`, {
+            headers: { 'Accept': 'application/json' }
+          });
         }
         
-        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(`API responded with status: ${response.status}`);
+        }
+        
+        data = await response.json();
         console.log("Transaction data:", JSON.stringify(data, null, 2));
         
-        // Check transaction validity
-        const msg = data.in_msg;
-        if (!msg) {
-          return res.json({ 
-            success: false, 
-            error: "Invalid transaction format - no input message found" 
-          });
-        }
-
-        const destination = msg.destination?.address || msg.destination;
-        const value = parseInt(msg.value || "0");
-        
-        console.log("Transaction details:", {
-          destination,
-          expectedReceiver: RECEIVER,
-          value,
-          valueInTON: value / 1000000000
-        });
-
-        // Check if payment goes to correct receiver
-        if (destination === RECEIVER) {
-          // Find matching package
-          const package = Object.entries(PACKAGES).find(([packageAmount, _]) => {
-            return value >= parseInt(packageAmount);
-          });
-
-          if (package) {
-            isValidPayment = true;
-            spinsEarned = package[1].spins;
-            packageName = package[1].name;
-            txDetails = {
-              hash: txHash,
-              from: msg.source?.address || msg.source,
-              to: destination,
-              amount: value,
-              amountTON: (value / 1000000000).toFixed(4)
-            };
-          }
-        }
-
       } catch (apiError) {
-        console.error("TonAPI Error:", apiError);
+        console.error("API Error:", apiError);
         return res.status(500).json({ 
           success: false, 
-          error: "Failed to fetch transaction data from TonAPI",
+          error: "Failed to fetch transaction data",
           details: apiError.message 
         });
       }
-    } else if (senderAddress) {
-      // Method 2: Check recent transactions from sender address
-      console.log("Checking recent transactions from address:", senderAddress);
+
+      // Check transaction validity
+      const msg = data.in_msg;
+      const isValidReceiver = msg?.destination === RECEIVER || 
+                             msg?.destination?.address === RECEIVER;
+      const isValidAmount = parseInt(msg?.value || "0") >= AMOUNT;
+      
+      console.log("Validation:", {
+        destination: msg?.destination,
+        expectedReceiver: RECEIVER,
+        value: msg?.value,
+        expectedAmount: AMOUNT,
+        isValidReceiver,
+        isValidAmount
+      });
+
+      if (isValidReceiver && isValidAmount) {
+        return res.json({ 
+          success: true, 
+          message: "Payment verified successfully",
+          txHash: txHash
+        });
+      }
+      
+      return res.json({ 
+        success: false, 
+        error: "Payment validation failed",
+        details: {
+          receiverMatch: isValidReceiver,
+          amountMatch: isValidAmount,
+          actualReceiver: msg?.destination,
+          actualAmount: msg?.value
+        }
+      });
+    }
+
+    if (txBoc) {
+      console.log("Checking payment by txBoc for address:", from);
+      
+      if (!from || !to) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "from and to addresses are required when using txBoc" 
+        });
+      }
+
+      // Wait a bit for transaction to be indexed
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const query = `https://tonapi.io/v2/accounts/${from}/events?limit=10`;
       
       try {
-        // Wait a bit for transaction to be indexed
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        const response = await fetch(`https://tonapi.io/v2/accounts/${senderAddress}/events?limit=20`, {
+        const response = await fetch(query, {
           headers: { 'Accept': 'application/json' }
         });
         
         if (!response.ok) {
-          throw new Error(`TonAPI responded with status: ${response.status}`);
+          throw new Error(`API responded with status: ${response.status}`);
         }
         
         const data = await response.json();
-        console.log("Account events found:", data.events?.length || 0);
+        console.log("Account events:", JSON.stringify(data, null, 2));
         
-        // Look for recent outgoing transactions to our receiver
-        const recentPayment = data.events?.find(event => {
+        // Convert user-friendly address to raw format for comparison
+        function userFriendlyToRaw(address) {
+          if (!address || address.startsWith('0:')) return address;
+          
+          // Simple conversion for the specific address we're expecting
+          if (address === 'UQCb8i7V_2QxUurP0ZCIHCVglCmKSeKjIzgHekP3XDondvbm') {
+            return '0:9bf22ed5ff643152eacfd190881c256094298a49e2a32338077a43f75c3a2776';
+          }
+          
+          return address;
+        }
+        
+        const expectedReceiverRaw = userFriendlyToRaw(to);
+        console.log("Looking for payments to:", { 
+          original: to, 
+          rawFormat: expectedReceiverRaw 
+        });
+
+        // Look for recent outgoing transaction to our receiver
+        const recentTx = data.events?.find(event => {
           const action = event.actions?.[0];
           if (action?.type === 'TonTransfer') {
             const transfer = action.TonTransfer;
-            const recipientAddr = transfer?.recipient?.address;
-            const transferAmount = parseInt(transfer?.amount || "0");
+            const recipientAddr = transfer?.recipient?.address || transfer?.recipient;
             
-            // Check if this is a payment to our receiver within last 10 minutes
-            const isToReceiver = recipientAddr === RECEIVER;
-            const isRecent = new Date(event.timestamp * 1000) > new Date(Date.now() - 10 * 60 * 1000);
+            // Check if recipient matches our expected address (in raw format)
+            const isToReceiver = recipientAddr === expectedReceiverRaw || 
+                               recipientAddr === to;
             
-            console.log("Checking transaction:", {
+            const isValidAmount = parseInt(transfer?.amount || "0") >= amount;
+            const isRecent = new Date(event.timestamp * 1000) > new Date(Date.now() - 10 * 60 * 1000); // 10 minutes
+            
+            console.log("Transaction check:", {
               recipient: recipientAddr,
-              amount: transferAmount,
+              expectedReceiverRaw,
+              originalTo: to,
+              amount: transfer?.amount,
               timestamp: new Date(event.timestamp * 1000),
               isToReceiver,
+              isValidAmount,
               isRecent
             });
             
-            if (isToReceiver && isRecent) {
-              // Find matching package
-              const package = Object.entries(PACKAGES).find(([packageAmount, _]) => {
-                return transferAmount >= parseInt(packageAmount);
-              });
-
-              if (package) {
-                spinsEarned = package[1].spins;
-                packageName = package[1].name;
-                txDetails = {
-                  eventId: event.event_id,
-                  from: senderAddress,
-                  to: recipientAddr,
-                  amount: transferAmount,
-                  amountTON: (transferAmount / 1000000000).toFixed(4),
-                  timestamp: new Date(event.timestamp * 1000)
-                };
-                return true;
-              }
-            }
+            return isToReceiver && isValidAmount && isRecent;
           }
           return false;
         });
         
-        if (recentPayment) {
-          isValidPayment = true;
+        if (recentTx) {
+          return res.json({ 
+            success: true, 
+            message: "Payment verified successfully via txBoc",
+            eventId: recentTx.event_id
+          });
         }
         
+        return res.json({ 
+          success: false, 
+          error: "No matching transaction found",
+          details: "Transaction may not be indexed yet or doesn't match criteria"
+        });
+        
       } catch (apiError) {
-        console.error("TonAPI Error for address check:", apiError);
+        console.error("API Error for txBoc:", apiError);
         return res.status(500).json({ 
           success: false, 
-          error: "Failed to fetch account transactions from TonAPI",
+          error: "Failed to fetch account transactions",
           details: apiError.message 
         });
       }
     }
 
-    if (isValidPayment) {
-      return res.json({ 
-        success: true, 
-        message: "Payment verified successfully!",
-        spins: spinsEarned,
-        package: packageName,
-        transaction: txDetails
-      });
-    } else {
-      return res.json({ 
-        success: false, 
-        error: "No valid payment found",
-        message: "Either transaction not found, amount insufficient, or payment not to correct receiver",
-        expectedReceiver: RECEIVER,
-        availablePackages: PACKAGES
-      });
-    }
+    return res.status(400).json({ 
+      success: false, 
+      error: "Invalid request format" 
+    });
 
   } catch (err) {
     console.error("Unexpected error:", err);
@@ -275,17 +245,12 @@ app.post("/check-payment", async (req, res) => {
   }
 });
 
-// Alternative endpoint for transaction verification (backward compatibility)
-app.post("/verify-transaction", async (req, res) => {
-  return app.post("/check-payment")(req, res);
-});
-
 // Handle 404
 app.use('*', (req, res) => {
   res.status(404).json({ 
     success: false, 
     error: "Endpoint not found",
-    availableEndpoints: ["/", "/health", "/check-payment", "/verify-transaction"]
+    availableEndpoints: ["/", "/health", "/check-payment"]
   });
 });
 
@@ -302,11 +267,9 @@ app.use((error, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`✅ TON Spin Game Backend running on port ${PORT}`);
+  console.log(`✅ Backend running on port ${PORT}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/health`);
   console.log(`📡 API endpoint: http://localhost:${PORT}/check-payment`);
-  console.log(`🎰 Receiver address: ${RECEIVER}`);
-  console.log(`💰 Available packages:`, PACKAGES);
 });
 
 module.exports = app;
